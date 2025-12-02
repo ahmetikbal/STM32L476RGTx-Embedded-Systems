@@ -891,11 +891,11 @@ ARM Macro Assembler    Page 14
               00000000 
 Command Line: --debug --xref --diag_suppress=9931,A1950W --cpu=Cortex-M4.fp.sp 
 --depend=.\objects\startup_stm32l476xx.d -o.\objects\startup_stm32l476xx.o -I.\
-RTE\_Target_1 -IC:\Keil_v5\ARM\PACK\ARM\CMSIS\6.2.0\CMSIS\Core\Include -IC:\Kei
-l_v5\ARM\PACK\Keil\STM32L4xx_DFP\2.7.0\Drivers\CMSIS\Device\ST\STM32L4xx\Includ
-e --predefine="__EVAL SETA 1" --predefine="__UVISION_VERSION SETA 543" --predef
-ine="STM32L476xx SETA 1" --predefine="_RTE_ SETA 1" --list=.\listings\startup_s
-tm32l476xx.lst startup_stm32l476xx.s
+RTE\_Target_1 -IC:\Keil_v5\ARM\PACKS\ARM\CMSIS\6.2.0\CMSIS\Core\Include -IC:\Ke
+il_v5\ARM\PACKS\Keil\STM32L4xx_DFP\2.7.0\Drivers\CMSIS\Device\ST\STM32L4xx\Incl
+ude --predefine="__EVAL SETA 1" --predefine="__UVISION_VERSION SETA 543" --pred
+efine="STM32L476xx SETA 1" --predefine="_RTE_ SETA 1" --list=.\listings\startup
+_stm32l476xx.lst startup_stm32l476xx.s
 
 
 
