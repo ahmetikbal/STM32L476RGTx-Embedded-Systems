@@ -42,26 +42,24 @@ void Keypad_Pin_Init(void) {
 char keypad_scan(void) {
     for (int row = 0; row < 4; row++) {
         // All rows HIGH first
-        GPIOC->ODR |= (0xFU << 0); 
-        
+        GPIOC->ODR |= (0xFU << 0);
+
         // Set current row LOW
         GPIOC->ODR &= ~(1U << row);
-        
-        //delay_ms(100);
 
         int c1 = (GPIOC->IDR >> 4)  & 0x1;
         int c2 = (GPIOC->IDR >> 10) & 0x1;
         int c3 = (GPIOC->IDR >> 11) & 0x1;
         int c4 = (GPIOC->IDR >> 12) & 0x1;
 
-        if (c1 == 0) return keymap[row][0];
-        if (c2 == 0) return keymap[row][1];
-        if (c3 == 0) return keymap[row][2];
-        if (c4 == 0) return keymap[row][3];
+        if (c1 == 0) { delay_ms(30); return keymap[row][0]; }
+        if (c2 == 0) { delay_ms(30); return keymap[row][1]; }
+        if (c3 == 0) { delay_ms(30); return keymap[row][2]; }
+        if (c4 == 0) { delay_ms(30); return keymap[row][3]; }
     }
-    
+
     // Set all rows back to HIGH
     GPIOC->ODR |= (0xFU << 0);
-    
+
     return 0xFF; // No key pressed
 }

@@ -4,7 +4,6 @@
 #include "SysClock.h"
 #include "keypad.h"
 
-#define LED_PIN 5
 #define SG90_PIN 0
 
 
@@ -48,41 +47,59 @@ void TIM5_CH1_Init() {
 
 }
 
+int current_ccr = 1500;
 void Servo_SetAngle(int angle){
 	//duty cycle = ccr / (arr+1) for pwm mode 1
 	//ccr = 1000 for -90 rotate (1ms) but in real it's 500
 	//ccr = 1500 for 0 rotate (1.5ms)
 	//ccr = 2000 for 90 rotate (2ms) but in real it's 2500
+	//1000/90 = 11, 1 degree for 11 ccr
 	
-	if(angle == -90){
-		TIM5->CCR1 = 500;
-	}
-	else if(angle == 0){
-		TIM5->CCR1 = 1500;
-	}
-	else if(angle == 90){
-		TIM5->CCR1 = 2500;
-	}
+	if(angle == -90)
+		current_ccr = 500;
+	else if(angle == 0)
+		current_ccr = 1500;
+	else if(angle == 90)
+		current_ccr = 2500;
+	
+	
+	else if(angle == 10 && current_ccr<=(2500-111) ) //+=10
+		current_ccr += 111;
+	else if(angle == -10 && current_ccr>=(500+111)) //-=10
+		current_ccr -= 111;
+	
+	
+	TIM5->CCR1 = current_ccr; //duty cycle
 }
 
 		
 int main(void){
 		//System_Clock_Init();
+		Keypad_Pin_Init();
 		Motor_Init();
 		TIM5_CH1_Init();
+	
+		Servo_SetAngle(0);
+
 		
 	while(1){
 		
-		//test code
-		Servo_SetAngle(0);
-		delay_ms(100);
-		Servo_SetAngle(-90);
-		delay_ms(100);
-		Servo_SetAngle(90);
-		delay_ms(100);
-		Servo_SetAngle(0);
-		delay_ms(100);
-	
+		char key = keypad_scan();
+		
+		if(key == 'A')
+			Servo_SetAngle(-10);
+		else if(key == 'B')
+			Servo_SetAngle(10);
+		else if(key == 'C')
+			Servo_SetAngle(0);
+		
+		
+		//test
+		else if(key == '3')
+			Servo_SetAngle(-90);
+		else if(key == '6')
+			Servo_SetAngle(90);
+		
 	}
-	
+
 }
