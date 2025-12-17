@@ -12,16 +12,8 @@ void Motor_Init(){
 		GPIOA->MODER &= ~(3UL<<2*SG90_PIN);
 		GPIOA->MODER |= (2UL<<2*SG90_PIN);
 	
-		//SLAYTTA AFR[0] NEYE GORE
 		GPIOA->AFR[0] &= ~(0xF <<4*SG90_PIN); //PIN numaramiz 0 ile 7 arasindaysa [0] digerlerinde [1]
 		GPIOA->AFR[0] |= (2UL <<4*SG90_PIN); //tim5_ch1 PA0 icin alternate function 2 lazim, datasheetten
-	
-		GPIOA->OSPEEDR &= ~(0x03<<2*SG90_PIN);
-		GPIOA->OSPEEDR |= (3UL<<2*SG90_PIN);
-	
-		GPIOA->PUPDR &= ~(3UL<<2*SG90_PIN);
-	
-		GPIOA->OTYPER &= ~(1UL<<SG90_PIN);
 }
 
 
