@@ -7,9 +7,9 @@ static const char keymap[4][4] = {
     {'*', '0', '#', 'D'}
 };
 
-//void delay_ms(int ms) {
-//    for(volatile int i = 0; i < ms * 4000; i++);
-//}
+void delay_ms(int ms) {
+    for(volatile int i = 0; i < ms * 4000; i++);
+}
 
 void Keypad_Pin_Init(void) {
     // 1. Enable GPIOC Clock

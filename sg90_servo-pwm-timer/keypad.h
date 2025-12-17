@@ -5,6 +5,6 @@
 
 void Keypad_Pin_Init(void);
 char keypad_scan(void);
-//void delay_ms(int ms);
+void delay_ms(int ms);
 
 #endif
