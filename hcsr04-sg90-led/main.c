@@ -6,8 +6,19 @@
 #include "ssd1306.h"
 #include "ssd1306_tests.h"
 
-#define SG90_PIN 0
-#define HCSR04_PIN 6
+#define SG90_PIN 0 //PA0 - TIM5_CH1
+
+//HCSR04
+#define TRIGGER_PIN 5 //PB5 - TIM3_CH2
+#define ECHO_PIN 6 //PB6 - TIM4_CH1
+
+volatile uint32_t ic_rising = 0;
+volatile uint32_t ic_falling = 0;
+volatile uint32_t overflow_count = 0;
+volatile uint32_t pulse_width = 0;
+volatile uint8_t edge_state = 0; // 0: waiting rising, 1: waiting falling
+float distance = 0.0f;
+
 
 // User HSI (high-speed internal) as the processor clock
 void enable_HSI(){
@@ -88,11 +99,11 @@ void Servo_SetAngle(int angle){
 
 void UltrasonicSensor_Init(){
 		RCC->AHB2ENR |= RCC_AHB2ENR_GPIOBEN;
-		GPIOA->MODER &= ~(3UL<<2*HCSR04_PIN);
-		GPIOA->MODER |= (2UL<<2*HCSR04_PIN);
+		GPIOB->MODER &= ~(3UL<<2*ECHO_PIN);
+		GPIOB->MODER |= (2UL<<2*ECHO_PIN);
 	
-		GPIOA->AFR[0] &= ~(0xF <<4*HCSR04_PIN); //PIN numaramiz 0 ile 7 arasindaysa [0] digerlerinde [1]
-		GPIOA->AFR[0] |= (2UL <<4*HCSR04_PIN); //tim4_ch1 PA0 icin alternate function 2 lazim, datasheetten
+		GPIOB->AFR[0] &= ~(0xF <<4*ECHO_PIN); //PIN numaramiz 0 ile 7 arasindaysa [0] digerlerinde [1]
+		GPIOB->AFR[0] |= (2UL <<4*ECHO_PIN); //tim4_ch1 PB6 icin alternate function 2 lazim, datasheetten
 }
 
 
@@ -128,6 +139,103 @@ void TIM4_CH1_Init() {
 	NVIC_EnableIRQ(TIM4_IRQn);
 }
 
+void TIM4_IRQHandler(void){
+	
+	// Overflow event
+	if (TIM4->SR & TIM_SR_UIF){
+		overflow_count++;
+		TIM4->SR &= ~TIM_SR_UIF; // clear UIF
+	}
+	
+	// Input capture event
+	if (TIM4->SR & TIM_SR_CC1IF){
+		
+		uint32_t captured = TIM4->CCR1; // CC1IF auto cleared
+		
+		if(edge_state == 0){
+			// Rising edge
+			ic_rising = captured;
+			overflow_count = 0;
+			edge_state = 1;
+		}
+		else{
+			// Falling edge
+			ic_falling = captured;
+			
+			pulse_width = (overflow_count * 0xFFFF) + 
+			              (ic_falling - ic_rising);
+			
+			distance = pulse_width / 58.0f; // cm
+			
+			edge_state = 0;
+		}
+	}
+}
+
+void Ultrasonic_Trigger_Init(){
+	
+	RCC->AHB2ENR |= RCC_AHB2ENR_GPIOBEN;
+	
+	GPIOB->MODER &= ~(3UL << (2*TRIGGER_PIN));
+	GPIOB->MODER |=  (2UL << (2*TRIGGER_PIN)); // AF mode
+	
+	GPIOB->AFR[0] &= ~(0xF << (4*TRIGGER_PIN));
+	GPIOB->AFR[0] |=  (2UL << (4*TRIGGER_PIN)); // AF2 = TIM3
+	
+	
+	RCC->APB1ENR1 |= RCC_APB1ENR1_TIM3EN;
+	
+	TIM3->PSC = 15;        // 16MHz / (15+1) = 1MHz
+	TIM3->ARR = 0xFFFF;
+	
+	// PWM Mode on CH2
+	TIM3->CCMR1 &= ~TIM_CCMR1_OC2M;
+	TIM3->CCMR1 |= TIM_CCMR1_OC2M_1 | TIM_CCMR1_OC2M_2;
+	TIM3->CCMR1 |= TIM_CCMR1_OC2PE;
+	
+	TIM3->CCER |= TIM_CCER_CC2E;
+	
+	TIM3->CCR2 = 10; // 10 µs trigger pulse
+	
+	TIM3->CR1 |= TIM_CR1_CEN;
+}
+
+void Ultrasonic_Trigger(){
+	TIM3->CNT = 0;
+	while(TIM3->CNT < 20); // short delay between triggers
+}
+
+void Barrier_Control(){
+	
+	if(distance < 10.0f){
+		Servo_SetAngle(90);
+	}
+	else if(distance > 15.0f){
+		Servo_SetAngle(0);
+	}
+}
+
+void OLED_PrintDistance(float dist){
+	
+	char line1[20];
+	char line2[20];
+	
+	sprintf(line1, "Distance:");
+	sprintf(line2, "%.1f cm", dist);
+	
+	ssd1306_Fill(Black);
+	
+	ssd1306_SetCursor(0, 0);
+	ssd1306_WriteString(line1, Font_11x18, White);
+	
+	ssd1306_SetCursor(0, 20);
+	ssd1306_WriteString(line2, Font_11x18, White);
+	
+	ssd1306_UpdateScreen();
+}
+
+
+
 		
 int main(void){
 		//System_Clock_Init();
@@ -139,22 +247,21 @@ int main(void){
 		Motor_Init();
 		TIM5_CH1_Init();
 	
-		Servo_SetAngle(0);
-	
-	
-		char message[64] = "ABCDEFGHIJK";
-		//ssd1306_TestAll();
+		UltrasonicSensor_Init();
+		TIM4_CH1_Init();
+		Ultrasonic_Trigger_Init();
 		ssd1306_Init();
-		ssd1306_Fill(Black);
-		ssd1306_SetCursor(2,0);
-		ssd1306_WriteString(message, Font_11x18, White);		
-		ssd1306_UpdateScreen();	
-
+	
+		Servo_SetAngle(0);
 		
 	while(1){
 		
-			
-		
+			Ultrasonic_Trigger();
+			OLED_PrintDistance(distance);
+			Barrier_Control();
+	
+			for(volatile int i=0; i<50000; i++); // short delay
+
 	}
 
 }
