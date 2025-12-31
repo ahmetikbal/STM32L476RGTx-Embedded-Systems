@@ -6,19 +6,22 @@
 #include "ssd1306.h"
 #include "ssd1306_tests.h"
 
-#define SG90_PIN 0 //PA0 - TIM5_CH1
+#define SG90_PIN 0 // PA0 - TIM5_CH1
 
-//HCSR04
-#define TRIGGER_PIN 5 //PB5 - TIM3_CH2
-#define ECHO_PIN 6 //PB6 - TIM4_CH1
+// HCSR04
+#define TRIGGER_PIN 5 // PB5 - TIM3_CH2
+#define ECHO_PIN    6 // PB6 - TIM4_CH1
 
 volatile uint32_t ic_rising = 0;
 volatile uint32_t ic_falling = 0;
 volatile uint32_t overflow_count = 0;
 volatile uint32_t pulse_width = 0;
 volatile uint8_t edge_state = 0; // 0: waiting rising, 1: waiting falling
+volatile uint8_t  measurement_ready = 0;
+
 float distance = 0.0f;
 
+volatile uint32_t loop_counter = 0;
 
 // User HSI (high-speed internal) as the processor clock
 void enable_HSI(){
@@ -42,7 +45,7 @@ void Motor_Init(){
 		GPIOA->MODER |= (2UL<<2*SG90_PIN);
 	
 		GPIOA->AFR[0] &= ~(0xF <<4*SG90_PIN); //PIN numaramiz 0 ile 7 arasindaysa [0] digerlerinde [1]
-		GPIOA->AFR[0] |= (2UL <<4*SG90_PIN); //tim5_ch1 PA0 icin alternate function 2 lazim, datasheetten
+		GPIOA->AFR[0] |= (2UL <<4*SG90_PIN); //tim5_ch1 PA0 icin alternate function 2 lazim, datasheetten		
 }
 
 
@@ -68,7 +71,6 @@ void TIM5_CH1_Init() {
 	TIM5-> CR1 |= TIM_CR1_CEN; //enable the counter
 
 }
-
 
 int current_ccr = 1500;
 void Servo_SetAngle(int angle){
@@ -106,7 +108,6 @@ void UltrasonicSensor_Init(){
 		GPIOB->AFR[0] |= (2UL <<4*ECHO_PIN); //tim4_ch1 PB6 icin alternate function 2 lazim, datasheetten
 }
 
-
 //HCSR04 TIMER
 void TIM4_CH1_Init() {
 	
@@ -140,18 +141,18 @@ void TIM4_CH1_Init() {
 }
 
 void TIM4_IRQHandler(void){
-	
+
 	// Overflow event
-	if (TIM4->SR & TIM_SR_UIF){
+	if(TIM4->SR & TIM_SR_UIF){
 		overflow_count++;
 		TIM4->SR &= ~TIM_SR_UIF; // clear UIF
 	}
-	
+
 	// Input capture event
-	if (TIM4->SR & TIM_SR_CC1IF){
+	if(TIM4->SR & TIM_SR_CC1IF){
 		
 		uint32_t captured = TIM4->CCR1; // CC1IF auto cleared
-		
+
 		if(edge_state == 0){
 			// Rising edge
 			ic_rising = captured;
@@ -161,12 +162,14 @@ void TIM4_IRQHandler(void){
 		else{
 			// Falling edge
 			ic_falling = captured;
-			
+
 			pulse_width = (overflow_count * 0xFFFF) + 
 			              (ic_falling - ic_rising);
-			
-			distance = pulse_width / 58.0f; // cm
-			
+
+			if(pulse_width >= 150 && pulse_width <= 38000){ //HCSR04 MIN 2 CM MAX 4M
+				distance = pulse_width / 58.0f; // cm
+				measurement_ready = 1;
+			}
 			edge_state = 0;
 		}
 	}
@@ -201,6 +204,10 @@ void Ultrasonic_Trigger_Init(){
 }
 
 void Ultrasonic_Trigger(){
+	measurement_ready = 0;
+	edge_state = 0;
+	overflow_count = 0;
+
 	TIM3->CNT = 0;
 	while(TIM3->CNT < 20); // short delay between triggers
 }
@@ -219,49 +226,56 @@ void OLED_PrintDistance(float dist){
 	
 	char line1[20];
 	char line2[20];
-	
-	sprintf(line1, "Distance:");
-	sprintf(line2, "%.1f cm", dist);
-	
+
+	sprintf(line1, "Dist: %.1f cm", dist);
+	sprintf(line2, "Loop: %lu", loop_counter);
+
 	ssd1306_Fill(Black);
-	
-	ssd1306_SetCursor(0, 0);
-	ssd1306_WriteString(line1, Font_11x18, White);
-	
-	ssd1306_SetCursor(0, 20);
-	ssd1306_WriteString(line2, Font_11x18, White);
-	
+	ssd1306_SetCursor(0,0);
+	ssd1306_WriteString(line1, Font_7x10, White);
+	ssd1306_SetCursor(0,15);
+	ssd1306_WriteString(line2, Font_7x10, White);
+
 	ssd1306_UpdateScreen();
 }
 
+void delay_ms(uint32_t ms){
+	for(uint32_t i=0;i<ms;i++)
+		for(volatile int j=0;j<4000;j++);
+}
 
-
-		
 int main(void){
-		//System_Clock_Init();
-		enable_HSI();
+	//System_Clock_Init();
+	enable_HSI();
+
+	I2C_GPIO_init();
+	I2C_Initialization(I2C1);
+
+	Motor_Init();
+	TIM5_CH1_Init();
+
+	UltrasonicSensor_Init();
+	TIM4_CH1_Init();
+	Ultrasonic_Trigger_Init();
+	ssd1306_Init();
 	
-		I2C_GPIO_init();
-		I2C_Initialization(I2C1);
-	
-		Motor_Init();
-		TIM5_CH1_Init();
-	
-		UltrasonicSensor_Init();
-		TIM4_CH1_Init();
-		Ultrasonic_Trigger_Init();
-		ssd1306_Init();
-	
-		Servo_SetAngle(0);
-		
+	Servo_SetAngle(0);
+	delay_ms(500);
+
 	while(1){
-		
-			Ultrasonic_Trigger();
-			OLED_PrintDistance(distance);
+		loop_counter++;
+
+		Ultrasonic_Trigger();
+
+		uint32_t timeout=0;
+		while(!measurement_ready && timeout++ < 50000);
+
+		if(measurement_ready){
 			Barrier_Control();
-	
-			for(volatile int i=0; i<50000; i++); // short delay
+			if(loop_counter % 5 == 0)
+				OLED_PrintDistance(distance);
+		}
 
+		delay_ms(100);
 	}
-
 }
